@@ -34,29 +34,58 @@ app.post('/api/upload', upload.single('video'), (req, res) => {
     res.json({ filename: req.file.filename, path: req.file.path });
 });
 
+const { videoQueue } = require('./queue'); // Import queue
+
+// ... kode setup express lainnya tetap sama ...
+
+// ROUTE 1: Tambah Job ke Antrean
 app.post('/api/clip', async (req, res) => {
     try {
         const { filename, startTime, duration, options } = req.body;
         
-        // Sanitasi input dasar (Security)
         const safeFilename = path.basename(filename);
         const inputPath = path.join(__dirname, '../uploads', safeFilename);
-        
-        if (!fs.existsSync(inputPath)) return res.status(404).send('File not found');
-
         const outputFilename = `clip-${Date.now()}.${options.format || 'mp4'}`;
         const outputPath = path.join(__dirname, '../exports', outputFilename);
 
-        await processVideo(inputPath, outputPath, startTime, duration, options);
+        if (!fs.existsSync(inputPath)) return res.status(404).send('File not found');
 
-        res.json({ 
-            success: true, 
-            downloadUrl: `/exports/${outputFilename}` 
+        // Masukkan ke antrean
+        const job = await videoQueue.add('transcode', {
+            inputPath,
+            outputPath,
+            startTime,
+            duration,
+            options
         });
+
+        // Langsung balas ke frontend dengan Job ID (Non-blocking)
+        res.json({ success: true, jobId: job.id, message: 'Job queued' });
+
     } catch (err) {
-        console.error(err);
         res.status(500).json({ error: err.message });
     }
+});
+
+// ROUTE 2: Cek Status Job (Polling)
+app.get('/api/status/:id', async (req, res) => {
+    const jobId = req.params.id;
+    const job = await videoQueue.getJob(jobId);
+
+    if (!job) {
+        return res.status(404).json({ state: 'notFound' });
+    }
+
+    const state = await job.getState(); // waiting, active, completed, failed
+    const progress = job.progress;
+    const result = job.returnvalue;
+
+    res.json({
+        id: job.id,
+        state,
+        progress,
+        result // Akan ada isinya jika state == 'completed'
+    });
 });
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
