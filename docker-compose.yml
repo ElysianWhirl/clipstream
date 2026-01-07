@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    container_name: clipstream-api
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./backend/uploads:/app/uploads  # Persistensi data upload
+      - ./backend/exports:/app/exports  # Persistensi data hasil
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+
+  frontend:
+    build: ./frontend
+    container_name: clipstream-ui
+    ports:
+      - "3000:3000" # Vite/React default port
+    # Dalam production, sebaiknya frontend dibuild static dan diserve oleh Nginx atau Backend
+    # Untuk development/demo ini, kita jalankan dev server
+    stdin_open: true
+    tty: true
+    depends_on:
+      - backend
