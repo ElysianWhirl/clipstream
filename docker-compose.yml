@@ -7,20 +7,26 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      - ./backend/uploads:/app/uploads  # Persistensi data upload
-      - ./backend/exports:/app/exports  # Persistensi data hasil
-    restart: unless-stopped
+      - ./backend/uploads:/app/uploads
+      - ./backend/exports:/app/exports
     environment:
-      - NODE_ENV=production
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      - redis # Tunggu redis nyala dulu
 
   frontend:
     build: ./frontend
     container_name: clipstream-ui
     ports:
-      - "3000:3000" # Vite/React default port
-    # Dalam production, sebaiknya frontend dibuild static dan diserve oleh Nginx atau Backend
-    # Untuk development/demo ini, kita jalankan dev server
+      - "3000:3000"
     stdin_open: true
-    tty: true
     depends_on:
       - backend
+
+  # Service Baru: Redis
+  redis:
+    image: redis:alpine
+    container_name: clipstream-redis
+    ports:
+      - "6379:6379"
