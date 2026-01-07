@@ -41,23 +41,62 @@ function App() {
       videoRef.current.currentTime = startTime;
     }
   };
-
-  const processClip = async () => {
+  
+const [statusMessage, setStatusMessage] = useState(''); // "Menunggu antrean...", "Memproses..."
+  
+const processClip = async () => {
     setProcessing(true);
+    setStatusMessage('Mendaftarkan antrean...');
+    setDownloadUrl('');
+
     try {
-      const duration = endTime - startTime;
+      const clipDuration = endTime - startTime;
+      
+      // 1. Request Kliping (Dapat Job ID)
       const res = await axios.post('http://localhost:5000/api/clip', {
         filename: uploadedFilename,
-        startTime: startTime,
-        duration: duration,
-        options: { format: 'mp4', resolution: '1280x720' } // Bisa dibuat dinamis
+        startTime,
+        duration: clipDuration,
+        options: { format: 'mp4' }
       });
-      setDownloadUrl(`http://localhost:5000${res.data.downloadUrl}`);
+
+      const { jobId } = res.data;
+      setStatusMessage('Menunggu giliran...');
+
+      // 2. Mulai Polling Status setiap 2 detik
+      const intervalId = setInterval(async () => {
+        try {
+          const statusRes = await axios.get(`http://localhost:5000/api/status/${jobId}`);
+          const { state, result } = statusRes.data;
+
+          if (state === 'completed') {
+            // Selesai!
+            clearInterval(intervalId);
+            setDownloadUrl(`http://localhost:5000${result.downloadUrl}`);
+            setStatusMessage('Selesai!');
+            setProcessing(false);
+          } else if (state === 'failed') {
+            // Gagal
+            clearInterval(intervalId);
+            alert('Proses gagal di server.');
+            setProcessing(false);
+          } else if (state === 'active') {
+            setStatusMessage('Sedang memproses video...');
+          } else if (state === 'waiting') {
+            setStatusMessage(`Dalam antrean...`); 
+          }
+        } catch (error) {
+          console.error("Polling error", error);
+          clearInterval(intervalId);
+          setProcessing(false);
+        }
+      }, 2000); // Cek setiap 2 detik
+
     } catch (err) {
-      alert('Processing Error');
+      alert('Gagal menghubungi server.');
+      setProcessing(false);
     }
-    setProcessing(false);
-  };
+};
 
   return (
     <div className="min-h-screen bg-gray-900 text-white p-8">
@@ -116,12 +155,18 @@ function App() {
             {/* Tambahkan Form Select untuk Resolusi/Format disini */}
             
             <button 
-              onClick={processClip}
-              disabled={!uploadedFilename || processing}
-              className={`w-full py-3 rounded font-bold ${processing ? 'bg-gray-600' : 'bg-green-600 hover:bg-green-700'}`}
-            >
-              {processing ? 'Rendering...' : 'Export Clip'}
-            </button>
+  onClick={processClip}
+  disabled={!uploadedFilename || processing}
+  className={`w-full py-4 rounded-lg font-bold text-lg ... (style sebelumnya)`}
+>
+  {processing ? (
+    <span className="flex items-center justify-center gap-2">
+       {/* Icon spinner */}
+       <svg className="animate-spin h-5 w-5 text-white" ...></svg>
+       {statusMessage} {/* Tampilkan pesan dinamis */}
+    </span>
+  ) : '✂️ Export Clip'}
+</button>
 
             {downloadUrl && (
               <a 
